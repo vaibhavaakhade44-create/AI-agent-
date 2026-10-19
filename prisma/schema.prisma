@@ -1,0 +1,50 @@
+// Prisma schema for AI Agent Persistent Memory & Logging
+// Uses PostgreSQL as requested by the architecture diagram
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// 🗄️ Long-term Memory: facts, user preferences, knowledge base
+model Memory {
+  id        String   @id @default(uuid())
+  key       String   @unique
+  value     String
+  category  String   @default("general") // general, preference, credential, note
+  tags      String[] @default([])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([category])
+}
+
+// 💬 Conversation History across Mobile (Telegram), Laptop (Voice), and System
+model Conversation {
+  id        String   @id @default(uuid())
+  source    String   // 'telegram', 'voice', 'observer', 'system'
+  senderId  String?  // e.g. Telegram chat_id or 'local_user'
+  role      String   // 'user', 'assistant', 'system'
+  message   String
+  metadata  Json?    // Optional tool execution info, reasoning tokens, etc.
+  createdAt DateTime @default(now())
+
+  @@index([source, createdAt])
+}
+
+// 🔍 Observer System Alerts: Battery, CPU, Memory, Disk, Errors
+model SystemAlert {
+  id        String   @id @default(uuid())
+  type      String   // 'battery', 'cpu', 'memory', 'disk', 'error'
+  level     String   // 'info', 'warning', 'critical'
+  metric    Float?   // e.g. 92.5 (%)
+  message   String
+  resolved  Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([type, level])
+}
