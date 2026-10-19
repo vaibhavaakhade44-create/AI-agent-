@@ -53,9 +53,7 @@ class MainController {
     try {
       // 1. Save user query to persistent memory
       await memory.saveConversation({
-        source,
-        senderId,
-        role: 'user',
+        sender: 'User',
         message: command,
       });
 
@@ -71,9 +69,7 @@ class MainController {
 
       // 4. Save assistant response to persistent memory
       await memory.saveConversation({
-        source,
-        senderId,
-        role: 'assistant',
+        sender: 'Jarvis',
         message: assistantReply,
       });
 

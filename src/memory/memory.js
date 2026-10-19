@@ -2,7 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const config = require('../config');
 
-// Fallback JSON store path if PostgreSQL is offline
+// Fallback JSON store path if PostgreSQL is offline or credentials need updating
 const FALLBACK_STORE_DIR = path.join(__dirname, '../../data');
 const FALLBACK_STORE_FILE = path.join(FALLBACK_STORE_DIR, 'memory_store.json');
 
@@ -12,7 +12,7 @@ class MemoryManager {
     this.isPostgresConnected = false;
     this.localStore = {
       conversations: [],
-      memories: {},
+      memories: [],
       systemAlerts: [],
     };
     this.initFallbackStore();
@@ -27,6 +27,9 @@ class MemoryManager {
       if (fs.existsSync(FALLBACK_STORE_FILE)) {
         const raw = fs.readFileSync(FALLBACK_STORE_FILE, 'utf8');
         this.localStore = JSON.parse(raw);
+        if (!Array.isArray(this.localStore.memories)) {
+          this.localStore.memories = [];
+        }
       } else {
         this.persistLocalStore();
       }
@@ -60,43 +63,39 @@ class MemoryManager {
       console.log('✅ [Memory - PostgreSQL]: Connected successfully via Prisma.');
     } catch (err) {
       this.isPostgresConnected = false;
-      console.log('ℹ️ [Memory - Note]: PostgreSQL is not currently connected (' + err.message + ').');
-      console.log('   Using graceful local memory store in ./data/memory_store.json until PostgreSQL is active.');
+      console.log('ℹ️ [Memory - PostgreSQL Status]: Connection pending (' + (err.message.split('\n')[0] || 'Check credentials') + ').');
+      console.log('   Using resilient JSON backup in ./data/memory_store.json until PostgreSQL password is added to .env');
     }
   }
 
   /**
    * Save a conversation message
+   * @param {object} param
+   * @param {string} param.sender - 'User' | 'Jarvis'
+   * @param {string} param.message - Chat text
    */
-  async saveConversation({ source, senderId = null, role, message, metadata = null }) {
+  async saveConversation({ sender = 'User', message = '' }) {
     const entry = {
-      id: 'msg_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7),
-      source,
-      senderId: senderId ? String(senderId) : null,
-      role,
+      id: Date.now(),
+      sender,
       message,
-      metadata,
-      createdAt: new Date(),
+      timestamp: new Date(),
     };
 
     if (this.isPostgresConnected && this.prisma) {
       try {
         return await this.prisma.conversation.create({
           data: {
-            source,
-            senderId: entry.senderId,
-            role,
+            sender,
             message,
-            metadata: metadata || undefined,
           },
         });
       } catch (err) {
-        console.warn('⚠️ [Memory Postgres Error]: Falling back to local store for conversation:', err.message);
+        console.warn('⚠️ [Memory Postgres Error]: Falling back to local store for conversation.');
       }
     }
 
     this.localStore.conversations.push(entry);
-    // Keep last 100 in local fallback
     if (this.localStore.conversations.length > 100) {
       this.localStore.conversations = this.localStore.conversations.slice(-100);
     }
@@ -112,7 +111,7 @@ class MemoryManager {
       try {
         const history = await this.prisma.conversation.findMany({
           take: limit,
-          orderBy: { createdAt: 'desc' },
+          orderBy: { timestamp: 'desc' },
         });
         return history.reverse();
       } catch (err) {
@@ -124,45 +123,51 @@ class MemoryManager {
   }
 
   /**
-   * Save long term memory / key-value fact
+   * Save long term memory / topic fact
+   * @param {object} param
+   * @param {string} param.topic - e.g. "Clinic Project Folder"
+   * @param {string} param.content - e.g. "D:/Projects/Clinic"
    */
-  async saveMemory({ key, value, category = 'general', tags = [] }) {
+  async saveMemory({ topic, content }) {
     if (this.isPostgresConnected && this.prisma) {
       try {
-        return await this.prisma.memory.upsert({
-          where: { key },
-          update: { value, category, tags, updatedAt: new Date() },
-          create: { key, value, category, tags },
+        return await this.prisma.memory.create({
+          data: {
+            topic,
+            content,
+          },
         });
       } catch (err) {
         console.warn('⚠️ [Memory Postgres Error]: Failed saving memory to DB, using local store.');
       }
     }
 
-    this.localStore.memories[key] = {
-      key,
-      value,
-      category,
-      tags,
-      updatedAt: new Date(),
+    const memoryItem = {
+      id: Date.now(),
+      topic,
+      content,
+      createdAt: new Date(),
     };
+    this.localStore.memories.push(memoryItem);
     this.persistLocalStore();
-    return this.localStore.memories[key];
+    return memoryItem;
   }
 
   /**
-   * Get a memory by key
+   * Get memory by topic
    */
-  async getMemory(key) {
+  async getMemoryByTopic(topic) {
     if (this.isPostgresConnected && this.prisma) {
       try {
-        return await this.prisma.memory.findUnique({ where: { key } });
+        return await this.prisma.memory.findFirst({
+          where: { topic: { contains: topic, mode: 'insensitive' } },
+        });
       } catch (err) {
         // fallback
       }
     }
 
-    return this.localStore.memories[key] || null;
+    return this.localStore.memories.find(m => m.topic && m.topic.toLowerCase().includes(topic.toLowerCase())) || null;
   }
 
   /**
@@ -172,12 +177,12 @@ class MemoryManager {
     let memoriesList = [];
     if (this.isPostgresConnected && this.prisma) {
       try {
-        memoriesList = await this.prisma.memory.findMany({ take: 30 });
+        memoriesList = await this.prisma.memory.findMany({ take: 30, orderBy: { createdAt: 'desc' } });
       } catch (err) {
-        memoriesList = Object.values(this.localStore.memories);
+        memoriesList = this.localStore.memories;
       }
     } else {
-      memoriesList = Object.values(this.localStore.memories);
+      memoriesList = this.localStore.memories;
     }
 
     if (!memoriesList || memoriesList.length === 0) {
@@ -185,7 +190,7 @@ class MemoryManager {
     }
 
     return memoriesList
-      .map(m => `- [${m.category}] ${m.key}: ${m.value}`)
+      .map(m => `- [${m.topic}]: ${m.content}`)
       .join('\n');
   }
 
@@ -194,12 +199,11 @@ class MemoryManager {
    */
   async saveSystemAlert({ type, level = 'warning', metric = null, message }) {
     const alert = {
-      id: 'alert_' + Date.now(),
+      id: Date.now(),
       type,
       level,
       metric,
       message,
-      resolved: false,
       createdAt: new Date(),
     };
 

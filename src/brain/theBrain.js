@@ -55,8 +55,9 @@ ${toolList}
 
     // Append recent history
     for (const h of history.slice(-6)) {
+      const isUser = h.sender === 'User' || h.role === 'user';
       formattedMessages.push({
-        role: h.role === 'user' ? 'user' : 'assistant',
+        role: isUser ? 'user' : 'assistant',
         content: h.message,
       });
     }

@@ -1,5 +1,5 @@
 // Prisma schema for AI Agent Persistent Memory & Logging
-// Uses PostgreSQL as requested by the architecture diagram
+// Uses PostgreSQL as requested by the architecture
 
 generator client {
   provider = "prisma-client-js"
@@ -10,40 +10,33 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// 🗄️ Long-term Memory: facts, user preferences, knowledge base
+// 🗄️ Memory Table (Aathvani thevnyasathi)
 model Memory {
-  id        String   @id @default(uuid())
-  key       String   @unique
-  value     String
-  category  String   @default("general") // general, preference, credential, note
-  tags      String[] @default([])
+  id        Int      @id @default(autoincrement())
+  topic     String   // e.g., "Clinic Project Folder"
+  content   String   // e.g., "D:/Projects/Clinic"
   createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
 
-  @@index([category])
+  @@index([topic])
 }
 
-// 💬 Conversation History across Mobile (Telegram), Laptop (Voice), and System
+// 💬 Conversation History (Chat logs)
 model Conversation {
-  id        String   @id @default(uuid())
-  source    String   // 'telegram', 'voice', 'observer', 'system'
-  senderId  String?  // e.g. Telegram chat_id or 'local_user'
-  role      String   // 'user', 'assistant', 'system'
+  id        Int      @id @default(autoincrement())
+  sender    String   // "User" kiva "Jarvis"
   message   String
-  metadata  Json?    // Optional tool execution info, reasoning tokens, etc.
-  createdAt DateTime @default(now())
+  timestamp DateTime @default(now())
 
-  @@index([source, createdAt])
+  @@index([sender, timestamp])
 }
 
-// 🔍 Observer System Alerts: Battery, CPU, Memory, Disk, Errors
+// 🔍 Observer System Alerts
 model SystemAlert {
-  id        String   @id @default(uuid())
+  id        Int      @id @default(autoincrement())
   type      String   // 'battery', 'cpu', 'memory', 'disk', 'error'
   level     String   // 'info', 'warning', 'critical'
   metric    Float?   // e.g. 92.5 (%)
   message   String
-  resolved  Boolean  @default(false)
   createdAt DateTime @default(now())
 
   @@index([type, level])

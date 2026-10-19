@@ -1,5 +1,25 @@
 {
-  "conversations": [],
-  "memories": {},
+  "conversations": [
+    {
+      "id": 1792404503940,
+      "sender": "User",
+      "message": "Hello Jarvis",
+      "timestamp": "2026-10-19T10:08:23.940Z"
+    },
+    {
+      "id": 1792404503940,
+      "sender": "Jarvis",
+      "message": "Hello! How can I help you today?",
+      "timestamp": "2026-10-19T10:08:23.940Z"
+    }
+  ],
+  "memories": [
+    {
+      "id": 1792404503939,
+      "topic": "Clinic Project",
+      "content": "D:/Projects/Clinic",
+      "createdAt": "2026-10-19T10:08:23.939Z"
+    }
+  ],
   "systemAlerts": []
 }
